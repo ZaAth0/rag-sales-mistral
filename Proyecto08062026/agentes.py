@@ -112,14 +112,14 @@ class AgenteNormalizador:
         self.columnas_extra = list(columnas_actuales - columnas_esperadas)
 
         if self.columnas_faltantes:
-            print(f"⚠️  Columnas esperadas NO encontradas ({len(self.columnas_faltantes)}):")
+            print(f"  Columnas esperadas NO encontradas ({len(self.columnas_faltantes)}):")
             for col in self.columnas_faltantes:
                 print(f"   - {col}")
         else:
             print("✓ Todas las columnas esperadas están presentes.")
 
         if self.columnas_extra:
-            print(f"\n📋 Columnas adicionales encontradas ({len(self.columnas_extra)}):")
+            print(f"\n Columnas adicionales encontradas ({len(self.columnas_extra)}):")
             for col in self.columnas_extra:
                 print(f"   + {col}")
 
@@ -377,7 +377,7 @@ class AgenteNormalizador:
         return self.df_original
 
 
-print("Clase AgenteNormalizador definida (CORREGIDA con Escalado y Codificación).")
+print("Clase AgenteNormalizador definida")
 
 # Ejecución del Agente Normalizador
 
@@ -392,6 +392,31 @@ normalizador.limpiar_dataset()
 normalizador.generar_reporte()
 
 df_limpio = normalizador.obtener_dataset()
-print("\n✓ Agente Normalizador completado. Dataset listo para Agente Entrenador.")
+print("\n Agente Normalizador completado. Dataset listo para Agente Entrenador.")
 
+# CELDA 5: DIAGNOSTICO DE COLUMNAS
+# (Ejecutar para verificar que el dataset es el correcto)
 
+print("COLUMNAS DEL DATASET LIMPIO:")
+print("=" * 55)
+for i, col in enumerate(df_limpio.columns, 1):
+    n_nulos = df_limpio[col].isnull().sum()
+    print(
+        f"{i:3d}. {col:<35} "
+        f"tipo={str(df_limpio[col].dtype):<10} "
+        f"únicos={df_limpio[col].nunique():<6} "
+        f"nulos={n_nulos}"
+    )
+
+print(f"\nShape: {df_limpio.shape}")
+print("\nPrimeras 3 filas:")
+display(df_limpio.head(3))
+
+# Verificacion critica: confirmar que rating tiene valores validos
+if 'rating' in df_limpio.columns:
+    print(f"\n Columna 'rating' encontrada.")
+    print(f"  Rango   : [{df_limpio['rating'].min()}, {df_limpio['rating'].max()}]")
+    print(f"  Media   : {df_limpio['rating'].mean():.2f}")
+    print(f"  Nulos   : {df_limpio['rating'].isnull().sum()}")
+else:
+    print("\n ERROR: Columna 'rating' NO encontrada. Revisar carga del dataset.")
