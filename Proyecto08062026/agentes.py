@@ -634,3 +634,281 @@ class AgenteEntrenador:
 
         resultados = entrenador.obtener_resultados()
         print("Agente Entrenador completado. Resultados listos para Agente Comunicador.")
+
+# CELDA 8: AGENTE 3 - COMUNICADOR
+
+class AgenteComunicador:
+    """Agente de comunicación MEJORADO con generación de PDF."""
+
+    def __init__(self, df, resultados_entrenamiento):
+        self.df = df
+        self.resultados = resultados_entrenamiento
+        self.reporte_final = {}
+
+    def generar_visualizaciones(self):
+        """Dashboard 2x2 ligero."""
+        print("\nAGENTE COMUNICADOR - Visualizaciones")
+        print("-" * 50)
+
+        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+        # 1. Ratings
+        if 'rating' in self.df.columns:
+            counts = self.df['rating'].value_counts().sort_index()
+            axes[0, 0].bar(counts.index.astype(str), counts.values,
+                          color='gold', edgecolor='black')
+            axes[0, 0].set_title('Distribución de Ratings', fontweight='bold')
+            axes[0, 0].set_xlabel('Rating')
+            axes[0, 0].set_ylabel('Cantidad')
+
+        # 2. Categorías
+        col_cat = next((c for c in self.df.columns if 'categ' in c.lower()), None)
+        if col_cat is None:
+            # Buscar columnas one-hot encoded de categoría
+            col_cat_candidates = [c for c in self.df.columns if 'category_' in c]
+            if col_cat_candidates:
+                # Sumar las columnas one-hot para obtener conteos
+                cat_counts = self.df[col_cat_candidates].sum().sort_values(ascending=False).head(8)
+                axes[0, 1].barh(cat_counts.index, cat_counts.values,
+                               color='skyblue', edgecolor='black')
+                axes[0, 1].set_title('Top 8 Categorías', fontweight='bold')
+                axes[0, 1].invert_yaxis()
+
+        # 3. Precio vs Rating
+        col_precio = next((c for c in self.df.columns
+                          if 'discounted_price' in c.lower()
+                          and self.df[c].dtype in ['float64', 'int64']), None)
+        if col_precio and 'rating' in self.df.columns:
+            df_sample = self.df[[col_precio, 'rating']].dropna().sample(
+                min(2000, len(self.df)), random_state=42
+            )
+            axes[1, 0].scatter(df_sample[col_precio], df_sample['rating'],
+                              alpha=0.3, s=10, color='green')
+            axes[1, 0].set_title('Precio vs Rating', fontweight='bold')
+            axes[1, 0].set_xlabel('Precio Descontado')
+            axes[1, 0].set_ylabel('Rating')
+
+        # 4. Longitud de reviews
+        col_long = next((c for c in self.df.columns
+                        if 'length' in c.lower()
+                        and self.df[c].dtype in ['float64', 'int64']), None)
+        if col_long:
+            axes[1, 1].hist(self.df[col_long].dropna(), bins=25,
+                           color='coral', edgecolor='black')
+            axes[1, 1].set_title(f'Distribución de {col_long}', fontweight='bold')
+            axes[1, 1].set_xlabel(col_long)
+            axes[1, 1].set_ylabel('Frecuencia')
+
+        plt.suptitle('Dashboard - Amazon Product Reviews', fontsize=14, fontweight='bold')
+        plt.tight_layout()
+        plt.savefig('dashboard.png', dpi=100, bbox_inches='tight')
+        plt.show()
+        print("✓ Dashboard guardado como 'dashboard.png'")
+
+        return self
+
+    def crear_reporte_resumen(self):
+        """NUEVO: Reporte de texto mejorado con métricas de validation."""
+        print("\nAGENTE COMUNICADOR - Reporte")
+        print("=" * 60)
+
+        metricas = self.resultados['metricas']
+        r2_test = metricas['R2_test']
+        r2_val = metricas.get('R2_val', 'N/A')
+        rmse = metricas['RMSE_test']
+
+        if r2_test >= 0.50:
+            interpretacion = "Buena capacidad predictiva"
+            recomendacion = "El modelo podría usarse para predecir ratings con confianza razonable."
+        elif r2_test >= 0.25:
+            interpretacion = "Capacidad moderada (esperable en reviews de productos)"
+            recomendacion = "El modelo captura patrones pero tiene limitaciones propias de datos subjetivos."
+        else:
+            interpretacion = "Capacidad limitada - datos altamente subjetivos"
+            recomendacion = "Se recomienda explorar features adicionales o usar modelos más complejos."
+
+        reporte = f"""
+{'='*60}
+REPORTE DE ANÁLISIS - AMAZON PRODUCT REVIEWS
+Sistema de 3 Agentes de IA
+{'='*60}
+
+ DATASET ANALIZADO
+  • Registros: {len(self.df):,}
+  • Columnas: {len(self.df.columns)}
+  • Target: rating de productos
+
+ MODELO SELECCIONADO: {self.resultados['nombre_modelo']}
+  • R² Score (Test): {r2_test:.4f}
+  • R² Score (Validation): {r2_val if isinstance(r2_val, str) else f'{r2_val:.4f}'}
+  • RMSE: {rmse:.4f} puntos de rating
+  • Features utilizadas: {metricas['n_features']}
+  • Muestras train: {metricas.get('train_samples', 'N/A')}
+  • Muestras validation: {metricas.get('val_samples', 'N/A')}
+  • Muestras test: {metricas.get('test_samples', 'N/A')}
+
+ INTERPRETACIÓN
+  • {interpretacion}
+  • {recomendacion}
+
+ INSIGHTS PRINCIPALES:
+"""
+        for ins in self.resultados['insights']:
+            reporte += f"  • {ins}\n"
+
+        reporte += f"""
+ TRANSFORMACIONES APLICADAS
+  • Escalado: StandardScaler en variables numéricas
+  • Codificación: One-Hot Encoding en variables categóricas
+  • Limpieza: Eliminación de duplicados, imputación de nulos
+  • Features de texto: Longitud y conteo de palabras
+
+ ARCHIVOS GENERADOS
+  • amazon_reviews_limpio.csv
+  • reporte_analisis.txt
+  • reporte_analisis.pdf
+  • metricas_modelo.csv
+  • feature_importance.csv
+  • dashboard.png
+
+{'='*60}
+"""
+        print(reporte)
+        self.reporte_final['texto'] = reporte
+        self.reporte_final['interpretacion'] = interpretacion
+        self.reporte_final['recomendacion'] = recomendacion
+
+        # Guardar TXT
+        with open('reporte_analisis.txt', 'w', encoding='utf-8') as f:
+            f.write(reporte)
+        print(" Reporte TXT guardado")
+
+        return self
+
+    def generar_pdf(self):
+        """
+        NUEVO: Genera reporte PDF profesional con fpdf2.
+        """
+        print("\nAGENTE COMUNICADOR - Generando PDF")
+        print("-" * 50)
+
+        pdf = FPDF()
+        pdf.add_page()
+
+        # Título
+        pdf.set_font("Arial", "B", 20)
+        pdf.cell(0, 15, "REPORTE DE ANALISIS", ln=True, align="C")
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "Amazon Product Reviews - Sistema de 3 Agentes IA", ln=True, align="C")
+        pdf.ln(10)
+
+        # Sección 1: Dataset
+        pdf.set_font("Arial", "B", 14)
+        pdf.set_fill_color(70, 130, 180)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(0, 10, "  DATASET", ln=True, fill=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Arial", "", 11)
+        pdf.ln(3)
+        pdf.cell(0, 7, f"Registros analizados: {len(self.df):,}", ln=True)
+        pdf.cell(0, 7, f"Columnas del dataset: {len(self.df.columns)}", ln=True)
+        pdf.cell(0, 7, "Target: rating de productos (1-5 estrellas)", ln=True)
+        pdf.ln(5)
+
+        # Sección 2: Modelo
+        metricas = self.resultados['metricas']
+        pdf.set_font("Arial", "B", 14)
+        pdf.set_fill_color(70, 130, 180)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(0, 10, "  MODELO SELECCIONADO", ln=True, fill=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Arial", "", 11)
+        pdf.ln(3)
+        pdf.cell(0, 7, f"Algoritmo: {self.resultados['nombre_modelo']}", ln=True)
+        pdf.cell(0, 7, f"R2 Score (Test): {metricas['R2_test']:.4f}", ln=True)
+        if 'R2_val' in metricas:
+            pdf.cell(0, 7, f"R2 Score (Validation): {metricas['R2_val']:.4f}", ln=True)
+        pdf.cell(0, 7, f"RMSE: {metricas['RMSE_test']:.4f} puntos de rating", ln=True)
+        pdf.cell(0, 7, f"Features utilizadas: {metricas['n_features']}", ln=True)
+        pdf.cell(0, 7, f"Muestras - Train: {metricas.get('train_samples', 'N/A')} | Val: {metricas.get('val_samples', 'N/A')} | Test: {metricas.get('test_samples', 'N/A')}", ln=True)
+        pdf.ln(5)
+
+        # Sección 3: Interpretación
+        pdf.set_font("Arial", "B", 14)
+        pdf.set_fill_color(70, 130, 180)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(0, 10, "  INTERPRETACION", ln=True, fill=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Arial", "", 11)
+        pdf.ln(3)
+        pdf.multi_cell(0, 7, self.reporte_final.get('interpretacion', 'No disponible'))
+        pdf.ln(3)
+        pdf.multi_cell(0, 7, self.reporte_final.get('recomendacion', 'No disponible'))
+        pdf.ln(5)
+
+        # Sección 4: Insights
+        pdf.set_font("Arial", "B", 14)
+        pdf.set_fill_color(70, 130, 180)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(0, 10, "  INSIGHTS", ln=True, fill=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Arial", "", 11)
+        pdf.ln(3)
+        for insight in self.resultados['insights']:
+            pdf.cell(0, 7, f"  * {insight}", ln=True)
+        pdf.ln(5)
+
+        # Sección 5: Transformaciones
+        pdf.set_font("Arial", "B", 14)
+        pdf.set_fill_color(70, 130, 180)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(0, 10, "  TRANSFORMACIONES APLICADAS", ln=True, fill=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Arial", "", 11)
+        pdf.ln(3)
+        transformaciones = [
+            "Escalado: StandardScaler en variables numericas",
+            "Codificacion: One-Hot Encoding en variables categoricas",
+            "Limpieza: Eliminacion de duplicados e imputacion de nulos",
+            "Features de texto: Longitud y conteo de palabras"
+        ]
+        for trans in transformaciones:
+            pdf.cell(0, 7, f"  * {trans}", ln=True)
+
+        # Guardar PDF
+        pdf.output('reporte_analisis.pdf')
+        print("PDF generado: 'reporte_analisis.pdf'")
+
+        return self
+
+    def exportar_datos(self):
+        """Exporta archivos esenciales."""
+        print("\nAGENTE COMUNICADOR - Exportación")
+        print("-" * 50)
+
+        self.df.to_csv('amazon_reviews_limpio.csv', index=False)
+        print("amazon_reviews_limpio.csv")
+
+        metricas_exp = {k: v for k, v in self.resultados['metricas'].items()
+                       if isinstance(v, (int, float, str))}
+        pd.DataFrame([metricas_exp]).to_csv('metricas_modelo.csv', index=False)
+        print("metricas_modelo.csv")
+
+        if self.resultados.get('caracteristicas_importantes') is not None:
+            self.resultados['caracteristicas_importantes'].to_csv(
+                'feature_importance.csv', index=False
+            )
+            print(" feature_importance.csv")
+
+        return self
+
+    def ejecutar_pipeline_comunicacion(self):
+        """Ejecuta todo el pipeline incluyendo PDF."""
+        self.generar_visualizaciones()
+        self.crear_reporte_resumen()
+        self.generar_pdf()  # NUEVO
+        self.exportar_datos()
+        print("\n AGENTE COMUNICADOR COMPLETADO")
+        return self
+
+print("Clase AgenteComunicador MEJORADA (con PDF).")
