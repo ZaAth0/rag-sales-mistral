@@ -912,3 +912,18 @@ Sistema de 3 Agentes de IA
         return self
 
 print("Clase AgenteComunicador MEJORADA (con PDF).")
+
+comunicador = AgenteComunicador(df_limpio, resultados)
+comunicador.ejecutar_pipeline_comunicacion()
+
+#CELDA 9 - EJECUCION DE DEL COMUNICADOR Y RESULTADOS FINALES
+
+print("\n" + "="*60)
+print("SISTEMA DE 3 AGENTES COMPLETADO EXITOSAMENTE")
+print("="*60)
+print("\nArchivos generados:")
+print("  • amazon_reviews_limpio.csv")
+print("  • reporte_analisis.txt")
+print("  • metricas_modelo.csv")
+print("  • feature_importance.csv")
+print("  • dashboard.png")
