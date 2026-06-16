@@ -623,3 +623,13 @@ class AgenteEntrenador:
 
         print(f"\nMEJOR MODELO: {self.mejor_nombre}")
         print(f"  R² Score (Test): {self.resultados_modelos[self.mejor_nombre]['r2_test']:.4f}")
+
+        #Celda 7 - Ejecución del Agente Entrenador
+
+        entrenador = AgenteEntrenador(df_limpio)
+        entrenador.analisis_exploratorio()
+        entrenador.preparar_datos()
+        entrenador.entrenar_modelo()
+        entrenador.generar_insights()
+
+        resultados = entrenador.obtener_resultados()
