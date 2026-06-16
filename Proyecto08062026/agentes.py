@@ -633,3 +633,4 @@ class AgenteEntrenador:
         entrenador.generar_insights()
 
         resultados = entrenador.obtener_resultados()
+        print("Agente Entrenador completado. Resultados listos para Agente Comunicador.")
