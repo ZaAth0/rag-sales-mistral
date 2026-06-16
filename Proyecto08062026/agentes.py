@@ -420,3 +420,206 @@ if 'rating' in df_limpio.columns:
     print(f"  Nulos   : {df_limpio['rating'].isnull().sum()}")
 else:
     print("\n ERROR: Columna 'rating' NO encontrada. Revisar carga del dataset.")
+
+# ============================================
+# CELDA 6: AGENTE 2 - ENTRENADOR
+# Entrenamiento con división train/validation/test
+# ============================================
+
+class AgenteEntrenador:
+    """Agente de entrenamiento con división train/validation/test."""
+
+    COLUMNAS_EXCLUIR = {
+        'product_id', 'user_id', 'review_id', 'id', 'Id',
+        'ProductId', 'UserId', 'img_link', 'product_link',
+        'user_name', 'product_name', 'review_title', 'review_content',
+        'about_product', 'review_content_clean', 'review_title_clean',
+        'about_product_clean', 'category'
+    }
+
+    TARGET_CANDIDATES = ['rating', 'Score']
+
+    def __init__(self, df):
+        self.df = df.copy()
+        self.mejor_modelo = None
+        self.mejor_nombre = None
+        self.metricas = {}
+        self.resultados_modelos = {}
+        self.caracteristicas_importantes = None
+        self.features = []
+        self.target = None
+        self.X = None
+        self.y = None
+        # NUEVO: Guardar splits
+        self.X_train = None
+        self.X_val = None
+        self.X_test = None
+        self.y_train = None
+        self.y_val = None
+        self.y_test = None
+        self.insights = []
+
+    def _detectar_target(self, df):
+        for candidato in self.TARGET_CANDIDATES:
+            if candidato in df.columns:
+                return candidato
+        raise ValueError(f"No se encontró target. Buscadas: {self.TARGET_CANDIDATES}")
+    
+    def analisis_exploratorio(self):
+        """EDA rápido sin gráficos pesados."""
+        print("\nAGENTE ENTRENADOR - Fase 1: Análisis Exploratorio")
+        print("-" * 50)
+
+        self.target = self._detectar_target(self.df)
+        print(f"Target detectado: '{self.target}'")
+        print(f"  Media: {self.df[self.target].mean():.2f}")
+        print(f"  Mediana: {self.df[self.target].median():.2f}")
+        print(f"  Rango: [{self.df[self.target].min()}, {self.df[self.target].max()}]")
+
+        # Gráfico simple
+        plt.figure(figsize=(8, 4))
+        self.df[self.target].value_counts().sort_index().plot(
+            kind='bar',
+            color='steelblue',
+            edgecolor='black'
+        )
+        plt.title(f'Distribución de {self.target}')
+        plt.tight_layout()
+        plt.show()
+
+        return self
+
+    def preparar_datos(self):
+        """Preparación optimizada - SOLO features numéricas esenciales."""
+        print("\nAGENTE ENTRENADOR - Fase 2: Preparación de Datos")
+        print("-" * 50)
+
+        df_modelo = self.df.copy()
+        self.target = self._detectar_target(df_modelo)
+
+        if self.target == 'Score' and 'rating' not in df_modelo.columns:
+            df_modelo['rating'] = df_modelo['Score']
+            self.target = 'rating'
+
+        # Seleccionar SOLO features numéricas
+        self.features = [
+            col for col in df_modelo.columns
+            if df_modelo[col].dtype in ['float64', 'int64']
+            and col not in self.COLUMNAS_EXCLUIR
+            and col != self.target
+            and col != 'Score'
+            and not col.startswith('Unnamed')
+        ]
+
+        # LIMITAR a 20 features máximo
+        if len(self.features) > 20:
+            correlaciones = df_modelo[self.features + [self.target]].corr()[self.target].abs()
+            correlaciones = correlaciones.drop(self.target).sort_values(ascending=False)
+            self.features = correlaciones.head(20).index.tolist()
+            print("  Features limitadas a las 20 más relevantes")
+
+        print(f"Features seleccionadas: {len(self.features)}")
+
+        # Preparar X e y
+        cols_relevantes = self.features + [self.target]
+        df_modelo = df_modelo.dropna(subset=cols_relevantes)
+
+        self.X = df_modelo[self.features]
+        self.y = df_modelo[self.target]
+
+        print(f"Shape X: {self.X.shape}")
+        print(f"Muestras totales: {len(self.X)}")
+
+        return self
+
+    def entrenar_modelo(self):
+        """
+        NUEVO: Entrenamiento con división train/validation/test
+        """
+        print("\nAGENTE ENTRENADOR - Fase 3: Entrenamiento")
+        print("-" * 50)
+
+        # ============================================
+        # NUEVO: Split en train/validation/test (60/20/20)
+        # ============================================
+        print("NUEVO: Dividiendo en train/validation/test (60/20/20)...")
+
+        # Primer split: separar test set
+        X_temp, self.X_test, y_temp, self.y_test = train_test_split(
+            self.X, self.y, test_size=0.2, random_state=42
+        )
+
+        # Segundo split: separar validation del resto
+        self.X_train, self.X_val, self.y_train, self.y_val = train_test_split(
+            X_temp, y_temp, test_size=0.25, random_state=42  # 0.25 * 0.8 = 0.2 del total
+        )
+
+        print(f"Split completado:")
+        print(f"  • Train     : {len(self.X_train)} muestras")
+        print(f"  • Validation: {len(self.X_val)} muestras")
+        print(f"  • Test      : {len(self.X_test)} muestras")
+
+        # MODELOS LIGEROS
+        modelos = {
+            'Regresión Lineal': LinearRegression(),
+            'Random Forest': RandomForestRegressor(
+                n_estimators=30,
+                max_depth=5,
+                random_state=42,
+                n_jobs=-1
+            ),
+            'Gradient Boosting': GradientBoostingRegressor(
+                n_estimators=30,
+                max_depth=3,
+                learning_rate=0.1,
+                random_state=42
+            )
+        }
+
+        import time
+
+        for nombre, modelo in modelos.items():
+            print(f" {nombre}...", end=' ')
+            inicio = time.time()
+
+            modelo.fit(self.X_train, self.y_train)
+
+            # NUEVO: Evaluar en validation set también
+            y_pred_val = modelo.predict(self.X_val)
+            y_pred_val = np.clip(y_pred_val, 1.0, 5.0)
+
+            y_pred_test = modelo.predict(self.X_test)
+            y_pred_test = np.clip(y_pred_test, 1.0, 5.0)
+
+            # Métricas en test
+            r2 = r2_score(self.y_test, y_pred_test)
+            rmse = np.sqrt(mean_squared_error(self.y_test, y_pred_test))
+
+            # NUEVO: Métricas en validation
+            r2_val = r2_score(self.y_val, y_pred_val)
+            rmse_val = np.sqrt(mean_squared_error(self.y_val, y_pred_val))
+
+            # CV con solo 2 folds
+            cv_scores = cross_val_score(modelo, self.X, self.y, cv=2, scoring='r2')
+
+            tiempo = time.time() - inicio
+
+            self.resultados_modelos[nombre] = {
+                'modelo': modelo,
+                'r2_test': r2,
+                'rmse_test': rmse,
+                'r2_val': r2_val,        # NUEVO
+                'rmse_val': rmse_val,    # NUEVO
+                'cv_mean': cv_scores.mean(),
+                'cv_std': cv_scores.std()
+            }
+
+            print(f" R²(test)={r2:.4f} | R²(val)={r2_val:.4f} | RMSE={rmse:.4f} | {tiempo:.1f}s")
+
+        # Seleccionar mejor
+        self.mejor_nombre = max(self.resultados_modelos,
+                                key=lambda x: self.resultados_modelos[x]['r2_test'])
+        self.mejor_modelo = self.resultados_modelos[self.mejor_nombre]['modelo']
+
+        print(f"\nMEJOR MODELO: {self.mejor_nombre}")
+        print(f"  R² Score (Test): {self.resultados_modelos[self.mejor_nombre]['r2_test']:.4f}")
