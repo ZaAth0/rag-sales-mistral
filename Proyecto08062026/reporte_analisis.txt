@@ -1,0 +1,70 @@
+
+======================================================================
+REPORTE DE ANALISIS - AMAZON FINE FOOD REVIEWS
+Sistema de 3 Agentes de IA con Analisis de Sentimiento VADER
+======================================================================
+
+1. DATASET ANALIZADO
+   * Nombre: Amazon Fine Food Reviews
+   * Registros: 568,454
+   * Columnas totales: 21
+   * Target: Score (1-5 estrellas)
+   * Periodo: Reviews de alimentos en Amazon
+
+2. DISTRIBUCION DE SCORES
+   * Score 1: 52,268 (9.2%)
+   * Score 2: 29,769 (5.2%)
+   * Score 3: 42,640 (7.5%)
+   * Score 4: 80,655 (14.2%)
+   * Score 5: 363,122 (63.9%)
+   * Score medio: 4.18
+
+3. MODELO SELECCIONADO: Random Forest
+   * R2 Score (Test):        0.4460
+   * R2 Score (Validacion):  0.4493
+   * RMSE (Error cuadratico): 0.9712 puntos
+   * MAE (Error absoluto):    0.6803 puntos
+   * Exactitud exacta:        51.3%
+   * Exactitud con tolerancia ±1: 79.3%
+   * Features utilizadas: 10
+   * Muestras Train:      341,072
+   * Muestras Validacion: 113,691
+   * Muestras Test:       113,691
+
+4. INTERPRETACION DE RESULTADOS
+   * Capacidad predictiva MODERADA
+   * Rendimiento aceptable y esperable en datos subjetivos de reviews de alimentos.
+   * La exactitud con tolerancia de ±1 punto es del 79.3%,
+     lo que significa que el modelo acierta o se equivoca por solo 1 punto en la mayoria de casos.
+
+5. INSIGHTS PRINCIPALES
+   * Capacidad predictiva MODERADA (R2=0.446), aceptable para reviews.
+   * RMSE=0.97 puntos | MAE=0.68 puntos.
+   * Exactitud exacta: 51.3% | Con tolerancia ±1: 79.3%.
+   * 'Summary_sentiment' es el factor mas importante (importancia=0.665).
+   * Sesgo positivo: score medio=4.18/5.0 (78% son 4-5).
+   * Analisis de sentimiento VADER incluido como feature.
+
+6. FEATURES Y TRANSFORMACIONES APLICADAS
+   * Texto: Summary_length, Summary_word_count, Text_length, Text_word_count
+   * Fecha: Año, Mes, DiaSemana (extraidos del timestamp)
+   * Utilidad: HelpfulnessRatio (Numerator/Denominator)
+   * Sentimiento VADER: Summary_sentiment, Text_sentiment (compound score)
+   * Escalado: StandardScaler en variables numericas (excluyendo Score y sentiment)
+
+7. RENDIMIENTO COMPARATIVO DE MODELOS
+   * Regresion Lineal     R2=0.3325 | RMSE=1.0661 | MAE=0.7818
+   * Random Forest        R2=0.4460 | RMSE=0.9712 | MAE=0.6803
+   * Gradient Boosting    R2=0.4215 | RMSE=0.9925 | MAE=0.7162
+
+8. ARCHIVOS GENERADOS
+   * amazon_reviews_limpio.csv     - Dataset procesado
+   * reporte_analisis.txt          - Este reporte
+   * reporte_analisis.pdf          - Reporte en formato PDF
+   * metricas_modelo.csv           - Metricas de rendimiento
+   * feature_importance.csv        - Importancia de caracteristicas
+   * dashboard.png                 - Dashboard con 4 graficos
+
+======================================================================
+FECHA DE GENERACION: 2026-06-17 16:24:40
+======================================================================
