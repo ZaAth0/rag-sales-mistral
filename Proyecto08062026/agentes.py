@@ -713,140 +713,270 @@ class AgenteEntrenador:
 # CELDA 8: AGENTE 3 - COMUNICADOR
 
 class AgenteComunicador:
-    """Agente de comunicación MEJORADO con generación de PDF."""
+    """Agente de comunicacion MEJORADO con matriz de confusion y PDF profesional."""
 
-    def __init__(self, df, resultados_entrenamiento):
+    def __init__(self, df, resultados_entrenamiento, entrenador_obj=None, columna_target='Score'):
         self.df = df
         self.resultados = resultados_entrenamiento
+        self.entrenador = entrenador_obj
+        self.columna_target = columna_target
         self.reporte_final = {}
+        self.cols_numericas = [col for col in self.df.columns
+                               if self.df[col].dtype in ['float64', 'int64']]
 
     def generar_visualizaciones(self):
-        """Dashboard 2x2 ligero."""
+        """Dashboard 2x2 MEJORADO con matriz de confusion."""
         print("\nAGENTE COMUNICADOR - Visualizaciones")
         print("-" * 50)
 
-        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        plots_generados = 0
 
-        # 1. Ratings
-        if 'rating' in self.df.columns:
-            counts = self.df['rating'].value_counts().sort_index()
-            axes[0, 0].bar(counts.index.astype(str), counts.values,
-                          color='gold', edgecolor='black')
-            axes[0, 0].set_title('Distribución de Ratings', fontweight='bold')
-            axes[0, 0].set_xlabel('Rating')
-            axes[0, 0].set_ylabel('Cantidad')
+        
+        # GRAFICO 1: Distribucion de Scores
+        
+        print("Grafico 1: Distribucion de Scores...")
+        if self.columna_target in self.df.columns:
+            scores = self.df[self.columna_target].value_counts().sort_index()
+            colors = ['#FF4444', '#FF8C00', '#FFD700', '#90EE90', '#00C851']
+            bars = axes[0, 0].bar(scores.index.astype(str), scores.values,
+                                 color=colors[:len(scores)], edgecolor='black', linewidth=1.5)
+            axes[0, 0].set_title('Distribucion de Scores (1-5 estrellas)',
+                                fontweight='bold', fontsize=13)
+            axes[0, 0].set_xlabel('Score')
+            axes[0, 0].set_ylabel('Cantidad de Reviews')
 
-        # 2. Categorías
-        col_cat = next((c for c in self.df.columns if 'categ' in c.lower()), None)
-        if col_cat is None:
-            # Buscar columnas one-hot encoded de categoría
-            col_cat_candidates = [c for c in self.df.columns if 'category_' in c]
-            if col_cat_candidates:
-                # Sumar las columnas one-hot para obtener conteos
-                cat_counts = self.df[col_cat_candidates].sum().sort_values(ascending=False).head(8)
-                axes[0, 1].barh(cat_counts.index, cat_counts.values,
-                               color='skyblue', edgecolor='black')
-                axes[0, 1].set_title('Top 8 Categorías', fontweight='bold')
-                axes[0, 1].invert_yaxis()
+            total = scores.sum()
+            for bar, val in zip(bars, scores.values):
+                axes[0, 0].text(bar.get_x() + bar.get_width()/2,
+                               bar.get_height() + total*0.02,
+                               f'{val:,}\n({val/total*100:.1f}%)',
+                               ha='center', fontsize=9, fontweight='bold')
+            axes[0, 0].grid(axis='y', alpha=0.3)
+            plots_generados += 1
+            print(f"  * OK")
+        else:
+            axes[0, 0].text(0.5, 0.5, f'Columna "{self.columna_target}" no encontrada',
+                           ha='center', va='center', transform=axes[0, 0].transAxes, fontsize=12)
+            print(f"  * ATENCION: Score no encontrado")
 
-        # 3. Precio vs Rating
-        col_precio = next((c for c in self.df.columns
-                          if 'discounted_price' in c.lower()
-                          and self.df[c].dtype in ['float64', 'int64']), None)
-        if col_precio and 'rating' in self.df.columns:
-            df_sample = self.df[[col_precio, 'rating']].dropna().sample(
-                min(2000, len(self.df)), random_state=42
-            )
-            axes[1, 0].scatter(df_sample[col_precio], df_sample['rating'],
-                              alpha=0.3, s=10, color='green')
-            axes[1, 0].set_title('Precio vs Rating', fontweight='bold')
-            axes[1, 0].set_xlabel('Precio Descontado')
-            axes[1, 0].set_ylabel('Rating')
+        
+        # GRAFICO 2: Importancia de Caracteristicas
+        
+        print("Grafico 2: Importancia de Caracteristicas...")
+        if (self.resultados.get('caracteristicas_importantes') is not None and
+            len(self.resultados['caracteristicas_importantes']) > 0):
 
-        # 4. Longitud de reviews
-        col_long = next((c for c in self.df.columns
-                        if 'length' in c.lower()
-                        and self.df[c].dtype in ['float64', 'int64']), None)
-        if col_long:
-            axes[1, 1].hist(self.df[col_long].dropna(), bins=25,
-                           color='coral', edgecolor='black')
-            axes[1, 1].set_title(f'Distribución de {col_long}', fontweight='bold')
-            axes[1, 1].set_xlabel(col_long)
-            axes[1, 1].set_ylabel('Frecuencia')
+            top = self.resultados['caracteristicas_importantes'].head(10)
+            colors_blue = plt.cm.Blues(np.linspace(0.4, 0.9, len(top)))
+            axes[0, 1].barh(top['feature'], top['importance'],
+                           color=colors_blue, edgecolor='black', linewidth=1)
+            axes[0, 1].set_title('Top 10 Caracteristicas Importantes',
+                                fontweight='bold', fontsize=13)
+            axes[0, 1].set_xlabel('Importancia')
+            axes[0, 1].invert_yaxis()
+            axes[0, 1].grid(axis='x', alpha=0.3)
 
-        plt.suptitle('Dashboard - Amazon Product Reviews', fontsize=14, fontweight='bold')
+            # Agregar valores
+            for i, (idx, row) in enumerate(top.iterrows()):
+                axes[0, 1].text(row['importance'] + 0.01, i,
+                               f"{row['importance']:.3f}", va='center', fontsize=9)
+            plots_generados += 1
+            print(f"  * {len(top)} caracteristicas")
+        else:
+            axes[0, 1].text(0.5, 0.5, 'No hay datos de importancia',
+                           ha='center', va='center', transform=axes[0, 1].transAxes, fontsize=12)
+
+        
+        # GRAFICO 3: Scatter - Variable principal vs Score
+        
+        print("Grafico 3: Variable principal vs Score...")
+        var_x = None
+        if (self.resultados.get('caracteristicas_importantes') is not None and
+            len(self.resultados['caracteristicas_importantes']) > 0):
+            var_x = self.resultados['caracteristicas_importantes'].iloc[0]['feature']
+
+        if var_x is None:
+            for col in self.cols_numericas:
+                if col != self.columna_target and 'Id' not in col:
+                    var_x = col
+                    break
+
+        if var_x and var_x in self.df.columns and self.columna_target in self.df.columns:
+            df_plot = self.df[[var_x, self.columna_target]].dropna()
+            if len(df_plot) > 3000:
+                df_plot = df_plot.sample(3000, random_state=42)
+
+            axes[1, 0].scatter(df_plot[var_x], df_plot[self.columna_target],
+                              alpha=0.3, s=20, c='steelblue', edgecolors='none')
+            axes[1, 0].set_title(f'{var_x} vs {self.columna_target}',
+                                fontweight='bold', fontsize=13)
+            axes[1, 0].set_xlabel(var_x)
+            axes[1, 0].set_ylabel(self.columna_target)
+            axes[1, 0].grid(alpha=0.3)
+            plots_generados += 1
+            print(f"  * {var_x}")
+        else:
+            axes[1, 0].text(0.5, 0.5, 'No se encontraron variables',
+                           ha='center', va='center', transform=axes[1, 0].transAxes, fontsize=12)
+
+        
+        # MEJORA 3: GRAFICO 4 - MATRIZ DE CONFUSION
+        
+        print("Grafico 4: Matriz de Confusion...")
+        if self.entrenador is not None and hasattr(self.entrenador, 'mejor_modelo') and self.entrenador.mejor_modelo is not None:
+            try:
+                # Predecir en test
+                y_pred = self.entrenador.mejor_modelo.predict(self.entrenador.X_test)
+                y_pred_rounded = np.clip(np.round(y_pred), 1, 5).astype(int)
+                y_test_rounded = np.round(self.entrenador.y_test).astype(int)
+
+                # Matriz de confusion
+                cm = confusion_matrix(y_test_rounded, y_pred_rounded, labels=[1, 2, 3, 4, 5])
+
+                # Normalizar por fila
+                cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+                cm_normalized = np.nan_to_num(cm_normalized)
+
+                # Graficar
+                im = axes[1, 1].imshow(cm_normalized, cmap='Blues', aspect='auto', vmin=0, vmax=1)
+                axes[1, 1].set_title('Matriz de Confusion Normalizada\n(Score Real vs Predicho)',
+                                    fontweight='bold', fontsize=13)
+                axes[1, 1].set_xlabel('Score Predicho')
+                axes[1, 1].set_ylabel('Score Real')
+                axes[1, 1].set_xticks(range(5))
+                axes[1, 1].set_xticklabels(['1', '2', '3', '4', '5'])
+                axes[1, 1].set_yticks(range(5))
+                axes[1, 1].set_yticklabels(['1', '2', '3', '4', '5'])
+
+                # Agregar valores en celdas
+                for i in range(5):
+                    for j in range(5):
+                        if cm[i, j] > 0:
+                            text = axes[1, 1].text(j, i,
+                                                 f'{cm_normalized[i, j]:.1%}\n({cm[i, j]:,})',
+                                                 ha="center", va="center",
+                                                 color="white" if cm_normalized[i, j] > 0.5 else "black",
+                                                 fontsize=9, fontweight='bold')
+
+                plt.colorbar(im, ax=axes[1, 1], label='Proporcion')
+                plots_generados += 1
+                print(f"  * Matriz generada correctamente")
+            except Exception as e:
+                axes[1, 1].text(0.5, 0.5, f'Error al generar matriz:\n{e}',
+                               ha='center', va='center', transform=axes[1, 1].transAxes, fontsize=10)
+                print(f"  * Error: {e}")
+        else:
+            axes[1, 1].text(0.5, 0.5, 'Entrenador no disponible\npara matriz de confusion',
+                           ha='center', va='center', transform=axes[1, 1].transAxes, fontsize=12)
+
+        # Finalizar
+        plt.suptitle('Dashboard - Amazon Fine Food Reviews\nSistema de 3 Agentes de IA',
+                    fontsize=16, fontweight='bold', y=1.02)
         plt.tight_layout()
-        plt.savefig('dashboard.png', dpi=100, bbox_inches='tight')
+        plt.savefig('dashboard.png', dpi=150, bbox_inches='tight', facecolor='white')
         plt.show()
-        print("✓ Dashboard guardado como 'dashboard.png'")
+
+        print(f"\n{'='*50}")
+        print(f"Dashboard: {plots_generados}/4 graficos generados")
+        print("Guardado como: dashboard.png")
+        print(f"{'='*50}")
 
         return self
 
     def crear_reporte_resumen(self):
-        """NUEVO: Reporte de texto mejorado con métricas de validation."""
-        print("\nAGENTE COMUNICADOR - Reporte")
+        """Reporte MEJORADO con metricas adicionales."""
+        print("\nAGENTE COMUNICADOR - Generando Reporte")
         print("=" * 60)
 
         metricas = self.resultados['metricas']
         r2_test = metricas['R2_test']
         r2_val = metricas.get('R2_val', 'N/A')
         rmse = metricas['RMSE_test']
+        mae = metricas.get('MAE_test', 'N/A')
+        exactitud = metricas.get('Exactitud_tolerancia', 'N/A')
+        exactitud_exacta = metricas.get('Exactitud_exacta', 'N/A')
 
+        # Interpretacion
         if r2_test >= 0.50:
-            interpretacion = "Buena capacidad predictiva"
-            recomendacion = "El modelo podría usarse para predecir ratings con confianza razonable."
+            interpretacion = "BUENA capacidad predictiva"
+            recomendacion = "El modelo predice scores con buena precision."
         elif r2_test >= 0.25:
-            interpretacion = "Capacidad moderada (esperable en reviews de productos)"
-            recomendacion = "El modelo captura patrones pero tiene limitaciones propias de datos subjetivos."
+            interpretacion = "Capacidad predictiva MODERADA"
+            recomendacion = "Rendimiento aceptable y esperable en datos subjetivos de reviews de alimentos."
         else:
-            interpretacion = "Capacidad limitada - datos altamente subjetivos"
-            recomendacion = "Se recomienda explorar features adicionales o usar modelos más complejos."
+            interpretacion = "Capacidad predictiva LIMITADA"
+            recomendacion = "Las reviews de alimentos son inherentemente dificiles de predecir por su subjetividad."
 
         reporte = f"""
-{'='*60}
-REPORTE DE ANÁLISIS - AMAZON PRODUCT REVIEWS
-Sistema de 3 Agentes de IA
-{'='*60}
+{'='*70}
+REPORTE DE ANALISIS - AMAZON FINE FOOD REVIEWS
+Sistema de 3 Agentes de IA con Analisis de Sentimiento VADER
+{'='*70}
 
- DATASET ANALIZADO
-  • Registros: {len(self.df):,}
-  • Columnas: {len(self.df.columns)}
-  • Target: rating de productos
+1. DATASET ANALIZADO
+   * Nombre: Amazon Fine Food Reviews
+   * Registros: {len(self.df):,}
+   * Columnas totales: {len(self.df.columns)}
+   * Target: Score (1-5 estrellas)
+   * Periodo: Reviews de alimentos en Amazon
 
- MODELO SELECCIONADO: {self.resultados['nombre_modelo']}
-  • R² Score (Test): {r2_test:.4f}
-  • R² Score (Validation): {r2_val if isinstance(r2_val, str) else f'{r2_val:.4f}'}
-  • RMSE: {rmse:.4f} puntos de rating
-  • Features utilizadas: {metricas['n_features']}
-  • Muestras train: {metricas.get('train_samples', 'N/A')}
-  • Muestras validation: {metricas.get('val_samples', 'N/A')}
-  • Muestras test: {metricas.get('test_samples', 'N/A')}
+2. DISTRIBUCION DE SCORES
+   * Score 1: {(self.df['Score']==1).sum():,} ({(self.df['Score']==1).sum()/len(self.df)*100:.1f}%)
+   * Score 2: {(self.df['Score']==2).sum():,} ({(self.df['Score']==2).sum()/len(self.df)*100:.1f}%)
+   * Score 3: {(self.df['Score']==3).sum():,} ({(self.df['Score']==3).sum()/len(self.df)*100:.1f}%)
+   * Score 4: {(self.df['Score']==4).sum():,} ({(self.df['Score']==4).sum()/len(self.df)*100:.1f}%)
+   * Score 5: {(self.df['Score']==5).sum():,} ({(self.df['Score']==5).sum()/len(self.df)*100:.1f}%)
+   * Score medio: {self.df['Score'].mean():.2f}
 
- INTERPRETACIÓN
-  • {interpretacion}
-  • {recomendacion}
+3. MODELO SELECCIONADO: {self.resultados['nombre_modelo']}
+   * R2 Score (Test):        {r2_test:.4f}
+   * R2 Score (Validacion):  {r2_val if isinstance(r2_val, str) else f'{r2_val:.4f}'}
+   * RMSE (Error cuadratico): {rmse:.4f} puntos
+   * MAE (Error absoluto):    {mae if isinstance(mae, str) else f'{mae:.4f}'} puntos
+   * Exactitud exacta:        {exactitud_exacta if isinstance(exactitud_exacta, str) else f'{exactitud_exacta:.1%}'}
+   * Exactitud con tolerancia ±1: {exactitud if isinstance(exactitud, str) else f'{exactitud:.1%}'}
+   * Features utilizadas: {metricas['n_features']}
+   * Muestras Train:      {metricas.get('train_samples', 'N/A'):,}
+   * Muestras Validacion: {metricas.get('val_samples', 'N/A'):,}
+   * Muestras Test:       {metricas.get('test_samples', 'N/A'):,}
 
- INSIGHTS PRINCIPALES:
+4. INTERPRETACION DE RESULTADOS
+   * {interpretacion}
+   * {recomendacion}
+   * La exactitud con tolerancia de ±1 punto es del {exactitud if isinstance(exactitud, str) else f'{exactitud:.1%}'},
+     lo que significa que el modelo acierta o se equivoca por solo 1 punto en la mayoria de casos.
+
+5. INSIGHTS PRINCIPALES
 """
         for ins in self.resultados['insights']:
-            reporte += f"  • {ins}\n"
+            reporte += f"   * {ins}\n"
 
         reporte += f"""
- TRANSFORMACIONES APLICADAS
-  • Escalado: StandardScaler en variables numéricas
-  • Codificación: One-Hot Encoding en variables categóricas
-  • Limpieza: Eliminación de duplicados, imputación de nulos
-  • Features de texto: Longitud y conteo de palabras
+6. FEATURES Y TRANSFORMACIONES APLICADAS
+   * Texto: Summary_length, Summary_word_count, Text_length, Text_word_count
+   * Fecha: Año, Mes, DiaSemana (extraidos del timestamp)
+   * Utilidad: HelpfulnessRatio (Numerator/Denominator)
+   * Sentimiento VADER: Summary_sentiment, Text_sentiment (compound score)
+   * Escalado: StandardScaler en variables numericas (excluyendo Score y sentiment)
 
- ARCHIVOS GENERADOS
-  • amazon_reviews_limpio.csv
-  • reporte_analisis.txt
-  • reporte_analisis.pdf
-  • metricas_modelo.csv
-  • feature_importance.csv
-  • dashboard.png
+7. RENDIMIENTO COMPARATIVO DE MODELOS
+"""
+        for nombre, metrics in self.resultados.get('resultados_modelos', {}).items():
+            reporte += f"   * {nombre:<20} R2={metrics['r2_test']:.4f} | RMSE={metrics['rmse_test']:.4f} | MAE={metrics.get('mae_test', 'N/A'):.4f}\n"
 
-{'='*60}
+        reporte += f"""
+8. ARCHIVOS GENERADOS
+   * amazon_reviews_limpio.csv     - Dataset procesado
+   * reporte_analisis.txt          - Este reporte
+   * reporte_analisis.pdf          - Reporte en formato PDF
+   * metricas_modelo.csv           - Metricas de rendimiento
+   * feature_importance.csv        - Importancia de caracteristicas
+   * dashboard.png                 - Dashboard con 4 graficos
+
+{'='*70}
+FECHA DE GENERACION: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}
+{'='*70}
 """
         print(reporte)
         self.reporte_final['texto'] = reporte
@@ -856,140 +986,87 @@ Sistema de 3 Agentes de IA
         # Guardar TXT
         with open('reporte_analisis.txt', 'w', encoding='utf-8') as f:
             f.write(reporte)
-        print(" Reporte TXT guardado")
+        print("\nReporte TXT guardado: reporte_analisis.txt")
 
         return self
 
     def generar_pdf(self):
-        """
-        NUEVO: Genera reporte PDF profesional con fpdf2.
-        """
-        print("\nAGENTE COMUNICADOR - Generando PDF")
-        print("-" * 50)
+        """Genera PDF profesional."""
+        print("\nAGENTE COMUNICADOR - Generando PDF...")
 
-        pdf = FPDF()
-        pdf.add_page()
+        try:
+            pdf = FPDF()
+            pdf.add_page()
 
-        # Título
-        pdf.set_font("Arial", "B", 20)
-        pdf.cell(0, 15, "REPORTE DE ANALISIS", ln=True, align="C")
-        pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, "Amazon Product Reviews - Sistema de 3 Agentes IA", ln=True, align="C")
-        pdf.ln(10)
+            # Titulo principal
+            pdf.set_font("Arial", "B", 18)
+            pdf.set_text_color(0, 51, 102)
+            pdf.cell(0, 12, "REPORTE DE ANALISIS", ln=True, align="C")
+            pdf.set_font("Arial", "B", 13)
+            pdf.cell(0, 8, "Amazon Fine Food Reviews - Sistema de 3 Agentes IA", ln=True, align="C")
+            pdf.set_font("Arial", "I", 10)
+            pdf.set_text_color(100, 100, 100)
+            pdf.cell(0, 6, f"Generado: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}", ln=True, align="C")
+            pdf.ln(8)
 
-        # Sección 1: Dataset
-        pdf.set_font("Arial", "B", 14)
-        pdf.set_fill_color(70, 130, 180)
-        pdf.set_text_color(255, 255, 255)
-        pdf.cell(0, 10, "  DATASET", ln=True, fill=True)
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_font("Arial", "", 11)
-        pdf.ln(3)
-        pdf.cell(0, 7, f"Registros analizados: {len(self.df):,}", ln=True)
-        pdf.cell(0, 7, f"Columnas del dataset: {len(self.df.columns)}", ln=True)
-        pdf.cell(0, 7, "Target: rating de productos (1-5 estrellas)", ln=True)
-        pdf.ln(5)
+            # Contenido
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Arial", "", 9)
 
-        # Sección 2: Modelo
-        metricas = self.resultados['metricas']
-        pdf.set_font("Arial", "B", 14)
-        pdf.set_fill_color(70, 130, 180)
-        pdf.set_text_color(255, 255, 255)
-        pdf.cell(0, 10, "  MODELO SELECCIONADO", ln=True, fill=True)
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_font("Arial", "", 11)
-        pdf.ln(3)
-        pdf.cell(0, 7, f"Algoritmo: {self.resultados['nombre_modelo']}", ln=True)
-        pdf.cell(0, 7, f"R2 Score (Test): {metricas['R2_test']:.4f}", ln=True)
-        if 'R2_val' in metricas:
-            pdf.cell(0, 7, f"R2 Score (Validation): {metricas['R2_val']:.4f}", ln=True)
-        pdf.cell(0, 7, f"RMSE: {metricas['RMSE_test']:.4f} puntos de rating", ln=True)
-        pdf.cell(0, 7, f"Features utilizadas: {metricas['n_features']}", ln=True)
-        pdf.cell(0, 7, f"Muestras - Train: {metricas.get('train_samples', 'N/A')} | Val: {metricas.get('val_samples', 'N/A')} | Test: {metricas.get('test_samples', 'N/A')}", ln=True)
-        pdf.ln(5)
+            lineas = self.reporte_final.get('texto', '').split('\n')
+            for linea in lineas:
+                linea_limpia = linea.encode('latin-1', 'replace').decode('latin-1')
+                if linea_limpia.strip():
+                    if linea_limpia.strip().startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.')):
+                        pdf.set_font("Arial", "B", 10)
+                    else:
+                        pdf.set_font("Arial", "", 9)
+                    pdf.cell(0, 4.5, linea_limpia, ln=True)
 
-        # Sección 3: Interpretación
-        pdf.set_font("Arial", "B", 14)
-        pdf.set_fill_color(70, 130, 180)
-        pdf.set_text_color(255, 255, 255)
-        pdf.cell(0, 10, "  INTERPRETACION", ln=True, fill=True)
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_font("Arial", "", 11)
-        pdf.ln(3)
-        pdf.multi_cell(0, 7, self.reporte_final.get('interpretacion', 'No disponible'))
-        pdf.ln(3)
-        pdf.multi_cell(0, 7, self.reporte_final.get('recomendacion', 'No disponible'))
-        pdf.ln(5)
-
-        # Sección 4: Insights
-        pdf.set_font("Arial", "B", 14)
-        pdf.set_fill_color(70, 130, 180)
-        pdf.set_text_color(255, 255, 255)
-        pdf.cell(0, 10, "  INSIGHTS", ln=True, fill=True)
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_font("Arial", "", 11)
-        pdf.ln(3)
-        for insight in self.resultados['insights']:
-            pdf.cell(0, 7, f"  * {insight}", ln=True)
-        pdf.ln(5)
-
-        # Sección 5: Transformaciones
-        pdf.set_font("Arial", "B", 14)
-        pdf.set_fill_color(70, 130, 180)
-        pdf.set_text_color(255, 255, 255)
-        pdf.cell(0, 10, "  TRANSFORMACIONES APLICADAS", ln=True, fill=True)
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_font("Arial", "", 11)
-        pdf.ln(3)
-        transformaciones = [
-            "Escalado: StandardScaler en variables numericas",
-            "Codificacion: One-Hot Encoding en variables categoricas",
-            "Limpieza: Eliminacion de duplicados e imputacion de nulos",
-            "Features de texto: Longitud y conteo de palabras"
-        ]
-        for trans in transformaciones:
-            pdf.cell(0, 7, f"  * {trans}", ln=True)
-
-        # Guardar PDF
-        pdf.output('reporte_analisis.pdf')
-        print("PDF generado: 'reporte_analisis.pdf'")
+            pdf.output('reporte_analisis.pdf')
+            print("PDF generado: reporte_analisis.pdf")
+        except Exception as e:
+            print(f"Error al generar PDF: {e}")
+            print("El reporte TXT esta disponible como alternativa")
 
         return self
 
     def exportar_datos(self):
-        """Exporta archivos esenciales."""
-        print("\nAGENTE COMUNICADOR - Exportación")
+        """Exporta archivos CSV."""
+        print("\nAGENTE COMUNICADOR - Exportando datos...")
         print("-" * 50)
 
         self.df.to_csv('amazon_reviews_limpio.csv', index=False)
-        print("amazon_reviews_limpio.csv")
+        print("  * amazon_reviews_limpio.csv")
 
-        metricas_exp = {k: v for k, v in self.resultados['metricas'].items()
-                       if isinstance(v, (int, float, str))}
+        metricas_exp = {}
+        for k, v in self.resultados['metricas'].items():
+            if isinstance(v, (int, float, str, np.integer, np.floating)):
+                metricas_exp[k] = float(v) if isinstance(v, (np.integer, np.floating)) else v
         pd.DataFrame([metricas_exp]).to_csv('metricas_modelo.csv', index=False)
-        print("metricas_modelo.csv")
+        print("  * metricas_modelo.csv")
 
         if self.resultados.get('caracteristicas_importantes') is not None:
             self.resultados['caracteristicas_importantes'].to_csv(
                 'feature_importance.csv', index=False
             )
-            print(" feature_importance.csv")
+            print("  * feature_importance.csv")
 
+        print("Exportacion completada")
         return self
 
     def ejecutar_pipeline_comunicacion(self):
-        """Ejecuta todo el pipeline incluyendo PDF."""
+        """Ejecuta todo el pipeline de comunicacion."""
         self.generar_visualizaciones()
         self.crear_reporte_resumen()
-        self.generar_pdf()  # NUEVO
+        self.generar_pdf()
         self.exportar_datos()
-        print("\n AGENTE COMUNICADOR COMPLETADO")
+
+        print("\n" + "="*60)
+        print("AGENTE COMUNICADOR COMPLETADO EXITOSAMENTE")
+        print("="*60)
         return self
 
-print("Clase AgenteComunicador MEJORADA (con PDF).")
-
-comunicador = AgenteComunicador(df_limpio, resultados)
-comunicador.ejecutar_pipeline_comunicacion()
 
 #CELDA 9 - EJECUCION DE DEL COMUNICADOR Y RESULTADOS FINALES
 
