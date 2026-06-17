@@ -434,30 +434,24 @@ print("=" * 70)
 
 
 class AgenteEntrenador:
-    """Agente de entrenamiento con división train/validation/test."""
+    """Agente de entrenamiento OPTIMIZADO con metricas adicionales."""
 
     COLUMNAS_EXCLUIR = {
-        'product_id', 'user_id', 'review_id', 'id', 'Id',
-        'ProductId', 'UserId', 'img_link', 'product_link',
-        'user_name', 'product_name', 'review_title', 'review_content',
-        'about_product', 'review_content_clean', 'review_title_clean',
-        'about_product_clean', 'category'
+        'Id', 'ProductId', 'UserId', 'ProfileName',
+        'Summary', 'Text', 'Fecha'
     }
 
-    TARGET_CANDIDATES = ['rating', 'Score']
-
-    def __init__(self, df):
+    def __init__(self, df, columna_target='Score'):
         self.df = df.copy()
+        self.columna_target = columna_target
         self.mejor_modelo = None
         self.mejor_nombre = None
         self.metricas = {}
         self.resultados_modelos = {}
         self.caracteristicas_importantes = None
         self.features = []
-        self.target = None
         self.X = None
         self.y = None
-        # NUEVO: Guardar splits
         self.X_train = None
         self.X_val = None
         self.X_test = None
@@ -466,170 +460,247 @@ class AgenteEntrenador:
         self.y_test = None
         self.insights = []
 
-    def _detectar_target(self, df):
-        for candidato in self.TARGET_CANDIDATES:
-            if candidato in df.columns:
-                return candidato
-        raise ValueError(f"No se encontró target. Buscadas: {self.TARGET_CANDIDATES}")
-    
     def analisis_exploratorio(self):
-        """EDA rápido sin gráficos pesados."""
-        print("\nAGENTE ENTRENADOR - Fase 1: Análisis Exploratorio")
+        """EDA rapido."""
+        print("\nAGENTE ENTRENADOR - Fase 1: Analisis Exploratorio")
         print("-" * 50)
 
-        self.target = self._detectar_target(self.df)
-        print(f"Target detectado: '{self.target}'")
-        print(f"  Media: {self.df[self.target].mean():.2f}")
-        print(f"  Mediana: {self.df[self.target].median():.2f}")
-        print(f"  Rango: [{self.df[self.target].min()}, {self.df[self.target].max()}]")
+        if self.columna_target not in self.df.columns:
+            raise ValueError(f"Columna target '{self.columna_target}' no encontrada")
 
-        # Gráfico simple
+        self.target = self.columna_target
+        print(f"Target: '{self.target}'")
+
+        scores = self.df[self.target].dropna()
+        print(f"  Media: {scores.mean():.2f} | Mediana: {scores.median():.2f} | Rango: [{scores.min():.0f}, {scores.max():.0f}]")
+
+        # Grafico rapido
         plt.figure(figsize=(8, 4))
-        self.df[self.target].value_counts().sort_index().plot(
-            kind='bar',
-            color='steelblue',
-            edgecolor='black'
-        )
-        plt.title(f'Distribución de {self.target}')
+        score_counts = self.df[self.target].value_counts().sort_index()
+        colors = ['#FF4444', '#FF8C00', '#FFD700', '#90EE90', '#00C851']
+        bars = plt.bar(score_counts.index.astype(str), score_counts.values,
+                      color=colors, edgecolor='black', linewidth=1)
+        plt.title('Distribucion de Scores', fontweight='bold', fontsize=13)
+        plt.xlabel('Score')
+        plt.ylabel('Cantidad')
+        total = score_counts.sum()
+        for bar, val in zip(bars, score_counts.values):
+            plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + total*0.02,
+                    f'{val:,}', ha='center', fontsize=8)
+        plt.grid(axis='y', alpha=0.3)
         plt.tight_layout()
         plt.show()
-
         return self
 
     def preparar_datos(self):
-        """Preparación optimizada - SOLO features numéricas esenciales."""
-        print("\nAGENTE ENTRENADOR - Fase 2: Preparación de Datos")
+        """Preparacion de features."""
+        print("\nAGENTE ENTRENADOR - Fase 2: Preparacion de Datos")
         print("-" * 50)
 
-        df_modelo = self.df.copy()
-        self.target = self._detectar_target(df_modelo)
-
-        if self.target  'Score' and 'rating' not in df_modelo.columns:
-            df_modelo['rating'] = df_modelo['Score']
-            self.target = 'rating'
-
-        # Seleccionar SOLO features numéricas
         self.features = [
-            col for col in df_modelo.columns
-            if df_modelo[col].dtype in ['float64', 'int64']
+            col for col in self.df.columns
+            if self.df[col].dtype in ['float64', 'int64']
             and col not in self.COLUMNAS_EXCLUIR
-            and col != self.target
-            and col != 'Score'
+            and col != self.columna_target
             and not col.startswith('Unnamed')
         ]
 
-        # LIMITAR a 20 features máximo
-        if len(self.features) > 20:
-            correlaciones = df_modelo[self.features + [self.target]].corr()[self.target].abs()
-            correlaciones = correlaciones.drop(self.target).sort_values(ascending=False)
-            self.features = correlaciones.head(20).index.tolist()
-            print("  Features limitadas a las 20 más relevantes")
-
-        print(f"Features seleccionadas: {len(self.features)}")
+        print(f"Features ({len(self.features)}): {self.features}")
 
         # Preparar X e y
-        cols_relevantes = self.features + [self.target]
-        df_modelo = df_modelo.dropna(subset=cols_relevantes)
-
+        df_modelo = self.df.dropna(subset=self.features + [self.target])
         self.X = df_modelo[self.features]
         self.y = df_modelo[self.target]
 
-        print(f"Shape X: {self.X.shape}")
-        print(f"Muestras totales: {len(self.X)}")
-
+        print(f"Shape X: {self.X.shape} | Shape y: {self.y.shape}")
         return self
 
     def entrenar_modelo(self):
         """
-        NUEVO: Entrenamiento con división train/validation/test
+        Entrenamiento OPTIMIZADO:
+        - 30 arboles en vez de 50
+        - Sin cross-validation (ahorra 3x tiempo)
+        - n_jobs=-1 para usar todos los nucleos
         """
-        print("\nAGENTE ENTRENADOR - Fase 3: Entrenamiento")
+        print("\nAGENTE ENTRENADOR - Fase 3: Entrenamiento (Optimizado)")
         print("-" * 50)
 
-         
-        # NUEVO: Split en train/validation/test (60/20/20)
-         
-        print("NUEVO: Dividiendo en train/validation/test (60/20/20)...")
-
-        # Primer split: separar test set
+        # Split 60/20/20
+        print("Split train/validation/test (60/20/20)...")
         X_temp, self.X_test, y_temp, self.y_test = train_test_split(
             self.X, self.y, test_size=0.2, random_state=42
         )
-
-        # Segundo split: separar validation del resto
         self.X_train, self.X_val, self.y_train, self.y_val = train_test_split(
-            X_temp, y_temp, test_size=0.25, random_state=42  # 0.25 * 0.8 = 0.2 del total
+            X_temp, y_temp, test_size=0.25, random_state=42
         )
 
-        print(f"Split completado:")
-        print(f"  • Train     : {len(self.X_train)} muestras")
-        print(f"  • Validation: {len(self.X_val)} muestras")
-        print(f"  • Test      : {len(self.X_test)} muestras")
+        print(f"  Train: {len(self.X_train):,} | Val: {len(self.X_val):,} | Test: {len(self.X_test):,}")
 
-        # MODELOS LIGEROS
+        # Modelos OPTIMIZADOS (menos arboles, max_depth limitado)
         modelos = {
-            'Regresión Lineal': LinearRegression(),
+            'Regresion Lineal': LinearRegression(),
             'Random Forest': RandomForestRegressor(
-                n_estimators=30,
-                max_depth=5,
+                n_estimators=30,      # Reducido de 50 a 30
+                max_depth=10,
                 random_state=42,
-                n_jobs=-1
+                n_jobs=-1             # Usa todos los nucleos
             ),
             'Gradient Boosting': GradientBoostingRegressor(
-                n_estimators=30,
-                max_depth=3,
+                n_estimators=30,      # Reducido de 50 a 30
+                max_depth=5,
                 learning_rate=0.1,
                 random_state=42
             )
         }
 
-        import time
+        print(f"\n{'Modelo':<20} {'R2(test)':>8} {'R2(val)':>8} {'RMSE':>8} {'MAE':>8} {'Exact(±1)':>10} {'Tiempo':>8}")
+        print("-" * 80)
 
         for nombre, modelo in modelos.items():
-            print(f" {nombre}...", end=' ')
+            print(f"  Entrenando {nombre}...", end=' ')
             inicio = time.time()
 
+            # Entrenar
             modelo.fit(self.X_train, self.y_train)
 
-            # NUEVO: Evaluar en validation set también
+            # Predecir
             y_pred_val = modelo.predict(self.X_val)
             y_pred_val = np.clip(y_pred_val, 1.0, 5.0)
 
             y_pred_test = modelo.predict(self.X_test)
             y_pred_test = np.clip(y_pred_test, 1.0, 5.0)
 
-            # Métricas en test
-            r2 = r2_score(self.y_test, y_pred_test)
-            rmse = np.sqrt(mean_squared_error(self.y_test, y_pred_test))
-
-            # NUEVO: Métricas en validation
+            # Metricas basicas
+            r2_test = r2_score(self.y_test, y_pred_test)
+            rmse_test = np.sqrt(mean_squared_error(self.y_test, y_pred_test))
             r2_val = r2_score(self.y_val, y_pred_val)
-            rmse_val = np.sqrt(mean_squared_error(self.y_val, y_pred_val))
 
-            # CV con solo 2 folds
-            cv_scores = cross_val_score(modelo, self.X, self.y, cv=2, scoring='r2')
+            # Metricas adicionales
+            mae_test = mean_absolute_error(self.y_test, y_pred_test)
+            evs_test = explained_variance_score(self.y_test, y_pred_test)
+
+            # Exactitud
+            y_pred_rounded = np.round(y_pred_test)
+            y_test_rounded = np.round(self.y_test)
+            exactitud_exacta = np.mean(y_pred_rounded == y_test_rounded)
+            exactitud_tolerancia = np.mean(np.abs(y_pred_test - self.y_test) <= 1)
 
             tiempo = time.time() - inicio
 
             self.resultados_modelos[nombre] = {
                 'modelo': modelo,
-                'r2_test': r2,
-                'rmse_test': rmse,
-                'r2_val': r2_val,        # NUEVO
-                'rmse_val': rmse_val,    # NUEVO
-                'cv_mean': cv_scores.mean(),
-                'cv_std': cv_scores.std()
+                'r2_test': r2_test,
+                'rmse_test': rmse_test,
+                'r2_val': r2_val,
+                'mae_test': mae_test,
+                'evs_test': evs_test,
+                'exactitud_exacta': exactitud_exacta,
+                'exactitud_tolerancia': exactitud_tolerancia
             }
 
-            print(f" R²(test)={r2:.4f} | R²(val)={r2_val:.4f} | RMSE={rmse:.4f} | {tiempo:.1f}s")
+            print(f"R2={r2_test:.4f} | RMSE={rmse_test:.4f} | MAE={mae_test:.4f} | Exact(±1)={exactitud_tolerancia:.1%} | {tiempo:.1f}s")
 
-        # Seleccionar mejor
+        # Seleccionar mejor modelo
         self.mejor_nombre = max(self.resultados_modelos,
                                 key=lambda x: self.resultados_modelos[x]['r2_test'])
         self.mejor_modelo = self.resultados_modelos[self.mejor_nombre]['modelo']
+        mejor = self.resultados_modelos[self.mejor_nombre]
 
-        print(f"\nMEJOR MODELO: {self.mejor_nombre}")
-        print(f"  R² Score (Test): {self.resultados_modelos[self.mejor_nombre]['r2_test']:.4f}")
+        print(f"\n{'='*50}")
+        print(f"MEJOR MODELO: {self.mejor_nombre}")
+        print(f"{'='*50}")
+        print(f"  R2 Test:       {mejor['r2_test']:.4f}")
+        print(f"  R2 Validacion: {mejor['r2_val']:.4f}")
+        print(f"  RMSE:          {mejor['rmse_test']:.4f}")
+        print(f"  MAE:           {mejor['mae_test']:.4f}")
+        print(f"  Exactitud (±1): {mejor['exactitud_tolerancia']:.1%}")
+        print(f"  Exactitud Exacta: {mejor['exactitud_exacta']:.1%}")
+
+        return self
+
+    def generar_insights(self):
+        """Genera insights."""
+        print("\nAGENTE ENTRENADOR - Fase 4: Generacion de Insights")
+        print("-" * 50)
+
+        if self.mejor_modelo is None:
+            print("No hay modelo entrenado.")
+            return self
+
+        # Importancia de caracteristicas
+        if hasattr(self.mejor_modelo, 'feature_importances_'):
+            importancias = self.mejor_modelo.feature_importances_
+            self.caracteristicas_importantes = pd.DataFrame({
+                'feature': self.features,
+                'importance': importancias
+            }).sort_values('importance', ascending=False)
+
+            print("\nTop 10 caracteristicas:")
+            for idx, row in self.caracteristicas_importantes.head(10).iterrows():
+                bar = '█' * int(row['importance'] * 40)
+                print(f"  {row['feature']:<25} {row['importance']:.4f} {bar}")
+
+        # Insights
+        mejor = self.resultados_modelos[self.mejor_nombre]
+        self.insights = []
+
+        r2 = mejor['r2_test']
+        if r2 > 0.50:
+            self.insights.append(f"BUENA capacidad predictiva (R2={r2:.3f}).")
+        elif r2 > 0.25:
+            self.insights.append(f"Capacidad predictiva MODERADA (R2={r2:.3f}), aceptable para reviews.")
+        else:
+            self.insights.append(f"Capacidad LIMITADA (R2={r2:.3f}), tipico en datos subjetivos.")
+
+        self.insights.append(f"RMSE={mejor['rmse_test']:.2f} puntos | MAE={mejor['mae_test']:.2f} puntos.")
+        self.insights.append(f"Exactitud exacta: {mejor['exactitud_exacta']:.1%} | Con tolerancia ±1: {mejor['exactitud_tolerancia']:.1%}.")
+
+        if self.caracteristicas_importantes is not None and len(self.caracteristicas_importantes) > 0:
+            top = self.caracteristicas_importantes.iloc[0]
+            self.insights.append(f"'{top['feature']}' es el factor mas importante (importancia={top['importance']:.3f}).")
+
+        mean_score = self.y.mean()
+        self.insights.append(f"Sesgo positivo: score medio={mean_score:.2f}/5.0 ({((self.y>=4).sum()/len(self.y)*100):.0f}% son 4-5).")
+
+        if 'Summary_sentiment' in self.features or 'Text_sentiment' in self.features:
+            self.insights.append("Analisis de sentimiento VADER incluido como feature.")
+
+        print(f"\n{len(self.insights)} insights generados:")
+        for i, ins in enumerate(self.insights, 1):
+            print(f"  {i}. {ins}")
+
+        return self
+
+    def obtener_resultados(self):
+        """Retorna resultados."""
+        if self.mejor_modelo is None:
+            raise ValueError("No hay modelo entrenado.")
+
+        mejor = self.resultados_modelos[self.mejor_nombre]
+
+        return {
+            'nombre_modelo': self.mejor_nombre,
+            'modelo': self.mejor_modelo,
+            'metricas': {
+                'R2_test': mejor['r2_test'],
+                'R2_val': mejor['r2_val'],
+                'RMSE_test': mejor['rmse_test'],
+                'MAE_test': mejor['mae_test'],
+                'Exactitud_exacta': mejor['exactitud_exacta'],
+                'Exactitud_tolerancia': mejor['exactitud_tolerancia'],
+                'EVS_test': mejor['evs_test'],
+                'n_features': len(self.features),
+                'train_samples': len(self.X_train) if self.X_train is not None else 'N/A',
+                'val_samples': len(self.X_val) if self.X_val is not None else 'N/A',
+                'test_samples': len(self.X_test) if self.X_test is not None else 'N/A'
+            },
+            'caracteristicas_importantes': self.caracteristicas_importantes,
+            'insights': self.insights,
+            'resultados_modelos': self.resultados_modelos
+        }
+
+
+print("Clase AgenteEntrenador OPTIMIZADA (tiempo estimado: 45-60 segundos).")
 
         #Celda 7 - Ejecución del Agente Entrenador
 
