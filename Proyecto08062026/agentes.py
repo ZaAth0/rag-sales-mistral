@@ -323,6 +323,112 @@ for col_sent in ['Summary_sentiment', 'Text_sentiment']:
 print("\nPrimeras 3 filas:")
 display(df_limpio.head(3))
 
+# CELDA 5.5: Diagnostico de columnas
+
+print("=" * 70)
+print("DIAGNÓSTICO AVANZADO DE COLUMNAS DEL DATASET LIMPIO")
+print("=" * 70)
+
+# 1. Listar TODAS las columnas con detalles
+print("\n1. LISTADO COMPLETO DE COLUMNAS:")
+print("-" * 50)
+for i, col in enumerate(df_limpio.columns, 1):
+    dtype = str(df_limpio[col].dtype)
+    n_unique = df_limpio[col].nunique()
+    n_null = df_limpio[col].isnull().sum()
+
+    # Mostrar valores de ejemplo para columnas con pocos únicos
+    ejemplo = ""
+    if n_unique <= 10 and dtype in ['float64', 'int64']:
+        valores = df_limpio[col].dropna().unique()
+        ejemplo = f" -> Valores: {sorted(valores)[:5]}"
+
+    print(f"{i:3d}. {col:<40} dtype={dtype:<12} únicos={n_unique:<6} nulos={n_null} {ejemplo}")
+
+# 2. Buscar columnas específicas que nos interesan
+print("\n2. BÚSQUEDA DE COLUMNAS CLAVE:")
+print("-" * 50)
+
+# Buscar rating
+cols_rating = [col for col in df_limpio.columns if 'rating' in col.lower()]
+if cols_rating:
+    print(f"Columnas con 'rating' en el nombre: {cols_rating}")
+    for col in cols_rating:
+        if df_limpio[col].dtype in ['float64', 'int64']:
+            print(f"  * {col}: min={df_limpio[col].min():.2f}, max={df_limpio[col].max():.2f}, mean={df_limpio[col].mean():.2f}")
+else:
+    print("ATENCION: No se encontró NINGUNA columna con 'rating' en el nombre")
+    print("Buscando alternativas...")
+    # Buscar columnas que puedan ser ratings (valores entre 1-5)
+    for col in df_limpio.columns:
+        if df_limpio[col].dtype in ['float64', 'int64']:
+            if df_limpio[col].nunique() <= 5:
+                vals = sorted(df_limpio[col].dropna().unique())
+                if min(vals) >= 1 and max(vals) <= 5:
+                    print(f"  POSIBLE CANDIDATO: {col} -> valores={vals}")
+
+# Buscar precio
+cols_precio = [col for col in df_limpio.columns if any(term in col.lower() for term in ['price', 'precio', 'discounted', 'actual'])]
+if cols_precio:
+    print(f"\nColumnas relacionadas con precio: {cols_precio}")
+    for col in cols_precio:
+        if df_limpio[col].dtype in ['float64', 'int64']:
+            print(f"  * {col}: min={df_limpio[col].min():.4f}, max={df_limpio[col].max():.4f}")
+else:
+    print("\nNo se encontraron columnas relacionadas con precio")
+
+# Buscar longitud de texto
+cols_texto = [col for col in df_limpio.columns if any(term in col.lower() for term in ['length', 'word_count', 'longitud'])]
+if cols_texto:
+    print(f"\nColumnas de features de texto: {cols_texto}")
+else:
+    print("\nNo se encontraron columnas de features de texto")
+
+# 3. Identificar columnas numéricas que no son IDs
+print("\n3. COLUMNAS NUMÉRICAS (excluyendo posibles IDs):")
+print("-" * 50)
+cols_numericas = [col for col in df_limpio.columns
+                  if df_limpio[col].dtype in ['float64', 'int64']
+                  and not any(id_term in col.lower() for id_term in ['id', 'unnamed'])]
+print(f"Total: {len(cols_numericas)} columnas numéricas")
+for col in cols_numericas[:20]:
+    print(f"  * {col} (rango: {df_limpio[col].min():.4f} a {df_limpio[col].max():.4f})")
+if len(cols_numericas) > 20:
+    print(f"  ... y {len(cols_numericas) - 20} más")
+
+# 4. Identificar columnas categóricas (one-hot encoded)
+print("\n4. COLUMNAS ONE-HOT ENCODED (valores 0/1):")
+print("-" * 50)
+cols_binarias = [col for col in df_limpio.columns
+                 if df_limpio[col].dtype in ['float64', 'int64', 'bool']
+                 and df_limpio[col].nunique() <= 2
+                 and not any(id_term in col.lower() for id_term in ['id', 'unnamed'])]
+print(f"Total: {len(cols_binarias)} columnas binarias")
+if cols_binarias:
+    for col in cols_binarias[:10]:
+        print(f"  * {col}")
+    if len(cols_binarias) > 10:
+        print(f"  ... y {len(cols_binarias) - 10} más")
+
+# 5. Análisis del target real usado por el entrenador
+print("\n5. VERIFICACIÓN DEL TARGET:")
+print("-" * 50)
+# Revisar qué columnas tienen valores típicos de rating (1-5)
+for col in df_limpio.columns:
+    if df_limpio[col].dtype in ['float64', 'int64']:
+        vals = df_limpio[col].dropna()
+        if len(vals) > 0:
+            if 1 <= vals.min() <= 2 and 4 <= vals.max() <= 5 and vals.nunique() <= 5:
+                print(f"  POSIBLE TARGET (rating): {col}")
+                print(f"    Valores únicos: {sorted(vals.unique())}")
+                print(f"    Distribución:")
+                print(vals.value_counts().sort_index())
+
+print("\n" + "=" * 70)
+print("DIAGNÓSTICO COMPLETADO")
+print("=" * 70)
+
+
 # CELDA 6: AGENTE 2 - ENTRENADOR
 # Entrenamiento con división train/validation/test
 
