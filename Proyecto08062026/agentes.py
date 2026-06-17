@@ -271,14 +271,13 @@ class AgenteNormalizador:
 
 print("Clase AgenteNormalizador definida")
 
-# Ejecución del Agente Normalizador
+# CELDA 4: Ejecución del Agente Normalizador
 
 print("INICIANDO SISTEMA DE AGENTES DE IA")
 print("=" * 60)
 
 normalizador = AgenteNormalizador()
 normalizador.cargar_dataset()
-normalizador.validar_columnas() 
 normalizador.exploracion_inicial()
 normalizador.limpiar_dataset()
 normalizador.generar_reporte()
