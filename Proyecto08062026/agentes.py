@@ -699,12 +699,9 @@ class AgenteEntrenador:
             'resultados_modelos': self.resultados_modelos
         }
 
-
-print("Clase AgenteEntrenador OPTIMIZADA (tiempo estimado: 45-60 segundos).")
-
         #Celda 7 - Ejecución del Agente Entrenador
 
-        entrenador = AgenteEntrenador(df_limpio)
+        entrenador = AgenteEntrenador(df_limpio, columna_target='Score')
         entrenador.analisis_exploratorio()
         entrenador.preparar_datos()
         entrenador.entrenar_modelo()
