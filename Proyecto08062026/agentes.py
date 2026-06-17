@@ -1070,12 +1070,27 @@ FECHA DE GENERACION: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 #CELDA 9 - EJECUCION DE DEL COMUNICADOR Y RESULTADOS FINALES
 
-print("\n" + "="*60)
-print("SISTEMA DE 3 AGENTES COMPLETADO EXITOSAMENTE")
-print("="*60)
-print("\nArchivos generados:")
-print("  • amazon_reviews_limpio.csv")
-print("  • reporte_analisis.txt")
-print("  • metricas_modelo.csv")
-print("  • feature_importance.csv")
-print("  • dashboard.png")
+comunicador = AgenteComunicador(
+    df_limpio,
+    resultados,
+    entrenador_obj=entrenador,
+    columna_target='Score'
+)
+comunicador.ejecutar_pipeline_comunicacion()
+
+print("\n" + "="*70)
+print("SISTEMA DE 3 AGENTES DE IA COMPLETADO EXITOSAMENTE")
+print("="*70)
+print("\nResumen de archivos generados:")
+print("  1. amazon_reviews_limpio.csv     - Dataset procesado (568,454 registros)")
+print("  2. reporte_analisis.txt          - Reporte completo en texto")
+print("  3. reporte_analisis.pdf          - Reporte profesional en PDF")
+print("  4. metricas_modelo.csv           - Metricas de rendimiento")
+print("  5. feature_importance.csv        - Importancia de caracteristicas")
+print("  6. dashboard.png                 - Dashboard con 4 graficos")
+print("\nMejoras implementadas:")
+print("  * Analisis de sentimiento VADER (Summary + Text)")
+print("  * Metricas adicionales (MAE, Exactitud, EVS)")
+print("  * Matriz de confusion en dashboard")
+print("  * Reporte PDF profesional")
+print("="*70)
