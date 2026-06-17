@@ -286,32 +286,42 @@ df_limpio = normalizador.obtener_dataset()
 print("\n Agente Normalizador completado. Dataset listo para Agente Entrenador.")
 
 # CELDA 5: DIAGNOSTICO DE COLUMNAS
-# (Ejecutar para verificar que el dataset es el correcto)
-
 print("COLUMNAS DEL DATASET LIMPIO:")
 print("=" * 55)
 for i, col in enumerate(df_limpio.columns, 1):
     n_nulos = df_limpio[col].isnull().sum()
-    print(
-        f"{i:3d}. {col:<35} "
-        f"tipo={str(df_limpio[col].dtype):<10} "
-        f"únicos={df_limpio[col].nunique():<6} "
-        f"nulos={n_nulos}"
-    )
+    n_unicos = df_limpio[col].nunique()
+    dtype_str = str(df_limpio[col].dtype)
+
+    # Mostrar valores para columnas con pocos unicos
+    extra = ""
+    if n_unicos <= 10 and df_limpio[col].dtype in ['float64', 'int64']:
+        vals = sorted(df_limpio[col].dropna().unique())
+        extra = f" -> Valores: {vals}"
+
+    print(f"{i:3d}. {col:<35} tipo={dtype_str:<12} unicos={n_unicos:<8} nulos={n_nulos}{extra}")
 
 print(f"\nShape: {df_limpio.shape}")
+print(f"\nTotal columnas: {len(df_limpio.columns)}")
+
+# Verificar Score
+if 'Score' in df_limpio.columns:
+    print(f"\nColumna 'Score' ENCONTRADA:")
+    print(f"  Valores unicos: {sorted(df_limpio['Score'].dropna().unique())}")
+    print(f"  Media: {df_limpio['Score'].mean():.2f}")
+    print(f"  Distribucion:")
+    for score, count in df_limpio['Score'].value_counts().sort_index().items():
+        print(f"    Score {int(score)}: {count:,}")
+
+# Verificar nuevas features de sentimiento
+for col_sent in ['Summary_sentiment', 'Text_sentiment']:
+    if col_sent in df_limpio.columns:
+        print(f"\nColumna '{col_sent}' ENCONTRADA:")
+        print(f"  Rango: [{df_limpio[col_sent].min():.3f}, {df_limpio[col_sent].max():.3f}]")
+        print(f"  Media: {df_limpio[col_sent].mean():.3f}")
+
 print("\nPrimeras 3 filas:")
 display(df_limpio.head(3))
-
-# Verificacion critica: confirmar que rating tiene valores validos
-if 'rating' in df_limpio.columns:
-    print(f"\n Columna 'rating' encontrada.")
-    print(f"  Rango   : [{df_limpio['rating'].min()}, {df_limpio['rating'].max()}]")
-    print(f"  Media   : {df_limpio['rating'].mean():.2f}")
-    print(f"  Nulos   : {df_limpio['rating'].isnull().sum()}")
-else:
-    print("\n ERROR: Columna 'rating' NO encontrada. Revisar carga del dataset.")
-
 
 # CELDA 6: AGENTE 2 - ENTRENADOR
 # Entrenamiento con división train/validation/test
